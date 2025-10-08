@@ -32,7 +32,7 @@ impl<'c> PassManager<'c> {
 
     /// Returns an operation pass manager for nested operations corresponding to
     /// a given name.
-    pub fn nested_under(&self, name: &str) -> OperationPassManager<'c, '_> {
+    pub fn nested_under(&self, name: &str) -> OperationPassManager<'_, '_> {
         let name = StringRef::new(name);
 
         unsafe {
@@ -83,7 +83,7 @@ impl<'c> PassManager<'c> {
     }
 
     /// Converts a pass manager to an operation pass manager.
-    pub fn as_operation_pass_manager(&self) -> OperationPassManager<'c, '_> {
+    pub fn as_operation_pass_manager(&self) -> OperationPassManager<'_, '_> {
         unsafe { OperationPassManager::from_raw(mlirPassManagerGetAsOpPassManager(self.raw)) }
     }
 

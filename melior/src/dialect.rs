@@ -9,6 +9,7 @@ pub mod llvm;
 pub mod memref;
 mod registry;
 pub mod scf;
+pub mod transform;
 
 pub use self::{handle::DialectHandle, registry::DialectRegistry};
 use crate::{

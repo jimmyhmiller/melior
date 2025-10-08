@@ -6,7 +6,8 @@ use mlir_sys::{
     mlirGetDialectHandle__func__, mlirGetDialectHandle__gpu__, mlirGetDialectHandle__linalg__,
     mlirGetDialectHandle__llvm__, mlirGetDialectHandle__pdl__, mlirGetDialectHandle__quant__,
     mlirGetDialectHandle__scf__, mlirGetDialectHandle__shape__,
-    mlirGetDialectHandle__sparse_tensor__, mlirGetDialectHandle__tensor__, MlirDialectHandle,
+    mlirGetDialectHandle__sparse_tensor__, mlirGetDialectHandle__tensor__,
+    mlirGetDialectHandle__transform__, MlirDialectHandle,
 };
 
 /// A dialect handle.
@@ -74,6 +75,11 @@ impl DialectHandle {
     /// Creates a `tensor` dialect handle.
     pub fn tensor() -> Self {
         unsafe { Self::from_raw(mlirGetDialectHandle__tensor__()) }
+    }
+
+    /// Creates a `transform` dialect handle.
+    pub fn transform() -> Self {
+        unsafe { Self::from_raw(mlirGetDialectHandle__transform__()) }
     }
 
     /// Returns a namespace.
@@ -149,5 +155,10 @@ mod tests {
         let context = Context::new();
 
         DialectHandle::func().register_dialect(&context);
+    }
+
+    #[test]
+    fn transform() {
+        DialectHandle::transform();
     }
 }

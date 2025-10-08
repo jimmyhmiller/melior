@@ -42,7 +42,7 @@ impl Context {
     }
 
     /// Returns or loads a dialect.
-    pub fn get_or_load_dialect<'c>(&'c self, name: &str) -> Dialect<'c> {
+    pub fn get_or_load_dialect(&self, name: &str) -> Dialect<'_> {
         let name = StringRef::new(name);
 
         unsafe { Dialect::from_raw(mlirContextGetOrLoadDialect(self.raw, name.to_raw())) }
