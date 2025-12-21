@@ -21,7 +21,7 @@ pub fn sanitize_snake_case_identifier(name: &str) -> Result<Ident, Error> {
 
 fn sanitize_name(name: &str) -> Result<Ident, Error> {
     // Replace any "." with "_".
-    let mut name = name.replace('.', "_");
+    let mut name = name.replace('.', "_").trim_end_matches('_').to_string();
 
     // Add "_" suffix to avoid conflicts with existing methods.
     if RESERVED_NAMES.contains(&name.as_str())
@@ -58,11 +58,11 @@ pub fn sanitize_documentation(string: &str) -> Result<String, Error> {
         }
     }
 
-    let mut buffer = Vec::with_capacity(string.len());
+    let mut buffer = String::with_capacity(string.len());
 
     format_commonmark(node, &Default::default(), &mut buffer)?;
 
-    Ok(String::from_utf8(buffer)?)
+    Ok(buffer)
 }
 
 pub fn capitalize_string(string: &str) -> String {
@@ -106,7 +106,7 @@ mod tests {
     fn sanitize_code_block() {
         assert_eq!(
             &sanitize_documentation("```\nfoo\n```\n").unwrap(),
-            "``` text\nfoo\n```\n"
+            "```text\nfoo\n```\n"
         );
     }
 
@@ -114,7 +114,7 @@ mod tests {
     fn sanitize_code_blocks() {
         assert_eq!(
             &sanitize_documentation("```\nfoo\n```\n\n```\nbar\n```\n").unwrap(),
-            "``` text\nfoo\n```\n\n``` text\nbar\n```\n"
+            "```text\nfoo\n```\n\n```text\nbar\n```\n"
         );
     }
 
