@@ -1,7 +1,10 @@
 use super::Operation;
 use crate::{
     context::Context,
-    ir::{Attribute, AttributeLike, Block, Identifier, Location, Region, Type, Value},
+    ir::{
+        attribute::DenseI32ArrayAttribute, Attribute, AttributeLike, Block, Identifier, Location,
+        Region, Type, Value,
+    },
     string_ref::StringRef,
     Error,
 };
@@ -51,6 +54,79 @@ impl<'c> OperationBuilder<'c> {
                 &mut self.raw,
                 operands.len() as isize,
                 operands.as_ptr() as *const _,
+            )
+        }
+
+        self
+    }
+
+    /// Adds operands with segment sizes for operations with variadic operands.
+    ///
+    /// Some MLIR operations have variadic or optional operands and require an
+    /// `operandSegmentSizes` attribute to indicate how operands are grouped.
+    /// This method takes operand segments and automatically:
+    /// 1. Adds all operands in a flat list
+    /// 2. Adds the `operandSegmentSizes` attribute with the segment sizes
+    ///
+    /// # Example
+    ///
+    /// For `gpu.launch` which has segments like:
+    /// - asyncDependencies (variadic)
+    /// - gridSizeX, gridSizeY, gridSizeZ (required)
+    /// - blockSizeX, blockSizeY, blockSizeZ (required)
+    /// - clusterSizeX, clusterSizeY, clusterSizeZ (optional)
+    /// - dynamicSharedMemorySize (optional)
+    ///
+    /// ```ignore
+    /// builder.add_operands_with_segment_sizes(
+    ///     context,
+    ///     &[
+    ///         &[],                    // asyncDependencies (0)
+    ///         &[grid_x],              // gridSizeX (1)
+    ///         &[grid_y],              // gridSizeY (1)
+    ///         &[grid_z],              // gridSizeZ (1)
+    ///         &[block_x],             // blockSizeX (1)
+    ///         &[block_y],             // blockSizeY (1)
+    ///         &[block_z],             // blockSizeZ (1)
+    ///         &[],                    // clusterSizeX (0)
+    ///         &[],                    // clusterSizeY (0)
+    ///         &[],                    // clusterSizeZ (0)
+    ///         &[],                    // dynamicSharedMemorySize (0)
+    ///     ],
+    /// )
+    /// ```
+    pub fn add_operands_with_segment_sizes(
+        mut self,
+        context: &'c Context,
+        segments: &[&[Value<'c, '_>]],
+    ) -> Self {
+        // Collect all operands into a flat list
+        let all_operands: Vec<Value<'c, '_>> = segments.iter().flat_map(|s| s.iter().copied()).collect();
+
+        // Add all operands
+        if !all_operands.is_empty() {
+            unsafe {
+                mlirOperationStateAddOperands(
+                    &mut self.raw,
+                    all_operands.len() as isize,
+                    all_operands.as_ptr() as *const _,
+                )
+            }
+        }
+
+        // Create segment sizes array
+        let segment_sizes: Vec<i32> = segments.iter().map(|s| s.len() as i32).collect();
+        let segment_attr = DenseI32ArrayAttribute::new(context, &segment_sizes);
+
+        // Add operandSegmentSizes attribute
+        unsafe {
+            mlirOperationStateAddAttributes(
+                &mut self.raw,
+                1,
+                &[mlirNamedAttributeGet(
+                    Identifier::new(context, "operandSegmentSizes").to_raw(),
+                    segment_attr.to_raw(),
+                )] as *const _,
             )
         }
 
@@ -234,6 +310,45 @@ mod tests {
                 .unwrap()
                 .r#type(),
             r#type,
+        );
+    }
+
+    #[test]
+    fn add_operands_with_segment_sizes() {
+        let context = create_test_context();
+        context.set_allow_unregistered_dialects(true);
+
+        let location = Location::unknown(&context);
+        let r#type = Type::index(&context);
+        let block = Block::new(&[(r#type, location), (r#type, location), (r#type, location)]);
+        let arg0: Value = block.argument(0).unwrap().into();
+        let arg1: Value = block.argument(1).unwrap().into();
+        let arg2: Value = block.argument(2).unwrap().into();
+
+        // Test with various segment sizes: 0, 1, 2
+        let op = OperationBuilder::new("test.variadic_op", location)
+            .add_operands_with_segment_sizes(
+                &context,
+                &[
+                    &[],           // segment 0: empty
+                    &[arg0],       // segment 1: one operand
+                    &[arg1, arg2], // segment 2: two operands
+                ],
+            )
+            .build()
+            .unwrap();
+
+        // Verify operand count
+        assert_eq!(op.operand_count(), 3);
+
+        // Verify the operandSegmentSizes attribute was added
+        let attr = op.attribute("operandSegmentSizes").unwrap();
+        let attr_str = attr.to_string();
+        // DenseI32Array format is "array<i32: 0, 1, 2>"
+        assert!(
+            attr_str.contains("0") && attr_str.contains("1") && attr_str.contains("2"),
+            "Expected segment sizes in attribute, got: {}",
+            attr_str
         );
     }
 }

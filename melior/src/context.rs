@@ -10,7 +10,8 @@ use mlir_sys::{
     mlirContextEqual, mlirContextGetAllowUnregisteredDialects, mlirContextGetNumLoadedDialects,
     mlirContextGetNumRegisteredDialects, mlirContextGetOrLoadDialect,
     mlirContextIsRegisteredOperation, mlirContextLoadAllAvailableDialects,
-    mlirContextSetAllowUnregisteredDialects, MlirContext, MlirDiagnostic, MlirLogicalResult,
+    mlirContextSetAllowUnregisteredDialects, mlirInferTypeOpInterfaceTypeID,
+    mlirOperationImplementsInterfaceStatic, MlirContext, MlirDiagnostic, MlirLogicalResult,
 };
 use std::{ffi::c_void, marker::PhantomData, mem::transmute};
 
@@ -78,6 +79,22 @@ impl Context {
         let name = StringRef::new(name);
 
         unsafe { mlirContextIsRegisteredOperation(self.raw, name.to_raw()) }
+    }
+
+    /// Returns `true` if an operation supports type inference.
+    ///
+    /// This checks if the operation implements the `InferTypeOpInterface`,
+    /// which allows MLIR to automatically infer result types from operands.
+    pub fn operation_supports_type_inference(&self, operation_name: &str) -> bool {
+        let name = StringRef::new(operation_name);
+
+        unsafe {
+            mlirOperationImplementsInterfaceStatic(
+                name.to_raw(),
+                self.raw,
+                mlirInferTypeOpInterfaceTypeID(),
+            )
+        }
     }
 
     /// Converts a context into a raw object.
@@ -323,5 +340,21 @@ mod tests {
         let ctx_ref_to_ref: &Context = unsafe { ctx_ref.to_ref() };
 
         assert_eq!(&ctx_ref, ctx_ref_to_ref);
+    }
+
+    #[test]
+    fn operation_supports_type_inference_arith() {
+        use crate::utility::register_all_dialects;
+
+        let context = Context::new();
+        let registry = DialectRegistry::new();
+        register_all_dialects(&registry);
+        context.append_dialect_registry(&registry);
+        context.load_all_available_dialects();
+
+        // arith.addi supports type inference
+        assert!(context.operation_supports_type_inference("arith.addi"));
+        // memref.store does not support type inference (void operation)
+        assert!(!context.operation_supports_type_inference("memref.store"));
     }
 }
